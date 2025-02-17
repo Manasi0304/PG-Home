@@ -1,37 +1,83 @@
-import React, { useState } from 'react';
-import { MdEmail } from 'react-icons/md';
-import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import React, { useState } from "react";
+import axios from "axios";
+import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
+import './Login.css';
 
 const ForgotPassword = () => {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [step, setStep] = useState(1);
   const navigate = useNavigate();
 
-  const submit = async (e) => {
-    e.preventDefault();
+  // Step 1: Send OTP to Email
+  const sendOtp = async () => {
     try {
-      const res = await axios.post("http://localhost:5000/reset_password", { email });
+      const res = await axios.post("http://localhost:5000/forgot-password/send-otp", { email });
       toast.success(res.data.message);
-      navigate('/login');
+      setStep(2);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Reset failed');
+      toast.error(err.response?.data?.message || "❌ Error sending OTP");
+    }
+  };
+
+  // Step 2: Verify OTP & Reset Password
+  const resetPassword = async () => {
+    try {
+      const res = await axios.post("http://localhost:5000/forgot-password/reset", {
+        email,
+        otp,
+        newPassword
+      });
+      toast.success(res.data.message);
+      navigate("/login"); // Redirect to login after reset
+    } catch (err) {
+      toast.error(err.response?.data?.message || "❌ Password reset failed");
     }
   };
 
   return (
-    <section className="registerForm">
+    <section className="forgotPasswordForm">
       <div className="formDiv">
-        <form onSubmit={submit}>
-          <h2>FORGOT PASSWORD</h2>
-          <div className="inpt">
-            <MdEmail />
-            <input type="email" placeholder="Email ID" required onChange={(e) => setEmail(e.target.value)} />
-          </div>
-          <button type="submit" className="btn2">SUBMIT</button>
-        </form>
-        <Link to="/login" className="link">LOGIN</Link>
+        <h2>Forgot Password</h2>
+
+        {step === 1 ? (
+          <>
+            <div>
+              <input
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <button onClick={sendOtp} className="btn2">Send OTP</button>
+          </>
+        ) : (
+          <>
+            <div>
+              <input
+                type="text"
+                placeholder="Enter OTP"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <input
+                type="password"
+                placeholder="Enter new password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+            </div>
+            <button onClick={resetPassword} className="btn2">Reset Password</button>
+          </>
+        )}
       </div>
     </section>
   );

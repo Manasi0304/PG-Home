@@ -29,17 +29,19 @@ body {
 }
 */
 
-/* ---------- Form Page Wrapper ---------- */
-.registerForm {
+/* ---------- Form Page Wrapper (Common for Login, Forgot Password & Reset Password) ---------- */
+.registerForm,
+.forgotPasswordForm,
+.resetPasswordForm {
   display: flex;
   min-height: 100vh;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 1rem;
+  padding: 7rem;
 }
 
-/* ---------- Form Container ---------- */
+/* ---------- Form Container (Common for all forms) ---------- */
 .formDiv {
   background-color: #db6934;
   padding: 3rem 4rem;
@@ -56,7 +58,7 @@ body {
   gap: 1rem;
 }
 
-/* ---------- Input Container ---------- */
+/* ---------- Input Container (Common for all forms) ---------- */
 .formDiv form div {
   display: flex;
   align-items: center;
@@ -64,8 +66,10 @@ body {
   padding: 0.5rem;
 }
 
-/* ---------- Input Fields ---------- */
-.formDiv form div input {
+/* ---------- Input Fields (Common for all forms) ---------- */
+.formDiv form div input,
+.forgotPasswordForm input,
+.resetPasswordForm input {
   flex: 1;
   font-size: 1rem;
   padding: 0.5rem;
@@ -80,7 +84,7 @@ body {
   color: #ccc;
 }
 
-/* ---------- Button Style ---------- */
+/* ---------- Button Style (Common for all forms) ---------- */
 .btn2 {
   background-color: #000;
   color: #fff;
@@ -118,7 +122,7 @@ body {
   filter: brightness(0.9);
 }
 
-/* ---------- Optional: Link Container ---------- */
+/* ---------- Optional: Link Container (Forgot Password Link) ---------- */
 #linkDiv {
   width: 100%;
   text-align: right;
@@ -133,6 +137,27 @@ body {
 #linkDiv a:hover {
   color: blue;
   text-decoration: underline;
+}
+
+/* ---------- Forgot Password & Reset Password Page Styles ---------- */
+.forgotPasswordForm h2,
+.resetPasswordForm h2 {
+  text-align: center;
+  color: #fff;
+  margin-bottom: 1.5rem;
+}
+
+.forgotPasswordForm input,
+.resetPasswordForm input {
+  width: 100%;
+  font-size: 1rem;
+  padding: 0.7rem;
+  border: none;
+  border-bottom: 2px solid #3f3f3f;
+  outline: none;
+  background: transparent;
+  color: #fff;
+  margin-bottom: 1rem;
 }
 
 /* ---------- Responsive Adjustments ---------- */
@@ -151,4 +176,3 @@ body {
     font-size: 0.9rem;
   }
 }
- 
