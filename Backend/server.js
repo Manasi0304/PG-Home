@@ -1,4 +1,3 @@
-// server.js
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -6,17 +5,17 @@ const multer = require("multer");
 const dotenv = require("dotenv");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const axios = require("axios");
 const nodemailer = require("nodemailer");
 
 dotenv.config();
 const app = express();
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static("uploads"));
 
-// **MongoDB Connection**
+// **Connect to MongoDB**
 mongoose
   .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log("✅ MongoDB Connected"))
@@ -26,8 +25,11 @@ mongoose
 const userSchema = new mongoose.Schema({
   firstName: String,
   lastName: String,
-  email: { type: String, unique: true },
+  email: { type: String, unique: true, required: true },
   password: String,
+  isVerified: { type: Boolean, default: false },
+  otp: String,
+  otpExpires: Date,
 });
 
 const User = mongoose.model("User", userSchema);
@@ -56,39 +58,85 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// **Authentication Middleware**
-const authenticate = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader)
-    return res.status(401).json({ message: "No token provided" });
-  const token = authHeader.split(" ")[1];
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(401).json({ message: "Invalid token" });
-    req.user = decoded;
-    next();
-  });
-};
+// **Nodemailer Configuration**
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
-// **User Registration API**
-app.post("/register", async (req, res) => {
+// **Generate OTP Function**
+const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+// **Send OTP Function**
+const sendOTP = async (email, otp) => {
   try {
-    const { firstName, lastName, email, password } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = new User({
-      firstName,
-      lastName,
-      email,
-      password: hashedPassword,
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "OTP Verification",
+      html: `<p>Your OTP for verification is <b>${otp}</b>. It is valid for 10 minutes.</p>`,
     });
 
-    await newUser.save();
-    res.json({ message: "✅ Registration successful!" });
+    console.log(`📧 OTP sent to ${email}: ${otp}`);
   } catch (error) {
-    res.status(500).json({ error: "❌ Registration failed" });
+    console.error("❌ Error sending OTP email:", error);
+    throw new Error("Error sending OTP email");
+  }
+};
+
+// **User Registration - Step 1 (Send OTP)**
+app.post("/register/send-otp", async (req, res) => {
+  try {
+    const { firstName, lastName, email, password } = req.body;
+
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({ message: "❌ All fields are required" });
+    }
+
+    if (await User.findOne({ email })) {
+      return res.status(400).json({ message: "❌ Email already exists" });
+    }
+
+    const otp = generateOTP();
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+
+    await User.create({ firstName, lastName, email, password: hashedPassword, otp, otpExpires });
+
+    await sendOTP(email, otp);
+    res.json({ message: "📧 OTP sent to your email." });
+
+  } catch (error) {
+    console.error("❌ Error in /register/send-otp:", error);
+    res.status(500).json({ message: "❌ Error sending OTP" });
   }
 });
 
-// **User Login API**
+// **User Registration - Step 2 (Verify OTP & Create Account)**
+app.post("/register/verify-otp", async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user || user.otp !== otp || user.otpExpires < Date.now()) {
+      return res.status(400).json({ message: "❌ Invalid or expired OTP" });
+    }
+
+    user.isVerified = true;
+    user.otp = null;
+    user.otpExpires = null;
+    await user.save();
+
+    res.json({ message: "✅ Account verified successfully!" });
+  } catch (error) {
+    res.status(500).json({ message: "❌ OTP verification failed" });
+  }
+});
+
+// **User Login**
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -98,131 +146,58 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ message: "❌ Invalid email or password" });
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    if (!user.isVerified) {
+      return res.status(403).json({ message: "❌ Account not verified. Please verify via OTP." });
+    }
+
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
     res.json({ message: "✅ Login successful!", token });
   } catch (error) {
-    res.status(500).json({ error: "❌ Login failed" });
+    res.status(500).json({ message: "❌ Login failed" });
   }
 });
 
-// **Forgot Password API (Email Sending)**
-app.post("/reset_password", async (req, res) => {
+// **Forgot Password - Step 1 (Send OTP)**
+app.post("/forgot-password/send-otp", async (req, res) => {
   try {
     const { email } = req.body;
     const user = await User.findOne({ email });
 
-    if (!user)
-      return res.status(404).json({ message: "❌ Email not found" });
+    if (!user) return res.status(404).json({ message: "❌ Email not found" });
 
-    // **Create a reset token**
-    const resetToken = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "15m",
-    });
+    const otp = generateOTP();
+    user.otp = otp;
+    user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    await user.save();
 
-    // **Send email using Nodemailer**
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    });
-
-    const resetLink = `http://localhost:5173/reset-password/${resetToken}`;
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: "Password Reset Request",
-      html: `<p>Click the link to reset your password: <a href="${resetLink}">${resetLink}</a></p>`,
-    });
-
-    res.json({ message: "📧 Password reset link sent to your email." });
+    await sendOTP(email, otp);
+    res.json({ message: "📧 OTP sent to reset your password." });
   } catch (error) {
-    res.status(500).json({ error: "❌ Error sending password reset email" });
+    res.status(500).json({ message: "❌ Error sending OTP" });
   }
 });
 
-// **Reset Password API**
-app.post("/reset_password/:token", async (req, res) => {
+// **Forgot Password - Step 2 (Reset Password)**
+app.post("/forgot-password/reset", async (req, res) => {
   try {
-    const { token } = req.params;
-    const { password } = req.body;
+    const { email, otp, newPassword } = req.body;
+    const user = await User.findOne({ email });
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const hashedPassword = await bcrypt.hash(password, 10);
+    if (!user || user.otp !== otp || user.otpExpires < Date.now()) {
+      return res.status(400).json({ message: "❌ Invalid or expired OTP" });
+    }
 
-    await User.findByIdAndUpdate(decoded.userId, { password: hashedPassword });
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.otp = null;
+    user.otpExpires = null;
+    await user.save();
+
     res.json({ message: "✅ Password reset successfully!" });
   } catch (error) {
-    res.status(400).json({ error: "❌ Invalid or expired token" });
+    res.status(500).json({ message: "❌ Error resetting password" });
   }
 });
 
-// **API to Get All Properties** (Public)
-app.get("/api/properties", async (req, res) => {
-  try {
-    const properties = await Property.find();
-    res.json(properties);
-  } catch (error) {
-    res.status(500).json({ error: "❌ Error fetching properties" });
-  }
-});
-
-// **API to Get Property by ID** (Protected)
-app.get("/api/properties/:id", authenticate, async (req, res) => {
-  try {
-    const property = await Property.findById(req.params.id);
-    if (!property)
-      return res.status(404).json({ message: "❌ Property not found" });
-
-    res.json(property);
-  } catch (error) {
-    res.status(500).json({ error: "❌ Error fetching property" });
-  }
-});
-
-// **API to Add Property with Image Upload** (Protected)
-app.post(
-  "/api/properties",
-  authenticate,
-  upload.array("images", 5),
-  async (req, res) => {
-    try {
-      const { title, description, price, location, tenantType, rentingOption, services } =
-        req.body;
-
-      // **Get Latitude & Longitude from OpenStreetMap API**
-      const geoResponse = await axios.get(`https://nominatim.openstreetmap.org/search`, {
-        params: { q: location, format: "json", limit: 1 },
-      });
-
-      if (geoResponse.data.length === 0) {
-        return res.status(400).json({ message: "❌ Invalid location. Try again." });
-      }
-
-      const { lat, lon } = geoResponse.data[0];
-
-      const newProperty = new Property({
-        title,
-        description,
-        price,
-        location,
-        latitude: parseFloat(lat),
-        longitude: parseFloat(lon),
-        images: req.files.map((file) => `/uploads/${file.filename}`),
-        tenantType,
-        rentingOption,
-        services: services ? services.split(",") : [],
-      });
-
-      await newProperty.save();
-      res.json({ message: "✅ Property added successfully!", property: newProperty });
-    } catch (error) {
-      res.status(500).json({ error: "❌ Error adding property" });
-    }
-  }
-);
-
-// **Start the Server**
+// **Start Server**
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

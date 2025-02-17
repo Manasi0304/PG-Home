@@ -1,5 +1,11 @@
+// src/App.jsx
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 import Navbar from "./components/Navbar/Navbar";
 import Hero from "./components/Hero/Hero";
 import Title from "./components/Title/Title";
@@ -14,7 +20,18 @@ import AddNewProperty from "./pages/AddNewProperty";
 import PropertyList from "./pages/PropertyList";
 import NewPropertyDetails from "./pages/NewPropertyDetails";
 import PropertyFilters from "./pages/PropertyFilters";
-import Chatbot from "./components/Chatbot/Chatbot"; // Fixed import path
+import Chatbot from "./components/Chatbot/Chatbot";
+import Login from "./components/Authentication/Login";
+import Register from "./components/Authentication/Register";
+import ForgotPassword from "./components/Authentication/ForgotPassword";
+
+const ProtectedRoute = ({ children }) => {
+  const token = localStorage.getItem("token");
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
 
 // Separate component for Home Page Sections
 const HomePageSections = () => (
@@ -50,9 +67,26 @@ const App = () => {
       <Routes>
         <Route path="/" element={<><Hero /><HomePageSections /></>} />
         <Route path="/properties" element={<PropertyList />} />
-        <Route path="/property/:id" element={<NewPropertyDetails />} />
-        <Route path="/add-property" element={<AddNewProperty />} />
+        <Route
+          path="/property/:id"
+          element={
+            <ProtectedRoute>
+              <NewPropertyDetails />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/add-property"
+          element={
+            <ProtectedRoute>
+              <AddNewProperty />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/property-filters" element={<PropertyFilters />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
       </Routes>
 
       <Footer />

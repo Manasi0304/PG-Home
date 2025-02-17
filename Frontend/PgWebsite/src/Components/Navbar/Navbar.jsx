@@ -1,5 +1,6 @@
+// src/components/Navbar/Navbar.jsx
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "./Navbar.css";
 
 const Navbar = () => {
@@ -7,12 +8,20 @@ const Navbar = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [navColor, setNavColor] = useState("dark-nav"); // Default navbar color
 
+  const navigate = useNavigate();
+  const isAuthenticated = !!localStorage.getItem("token");
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    navigate("/login");
+  };
+
   // Function to handle scroll event
   const handleScroll = () => {
     if (window.scrollY > 50) {
-      setNavColor("dark-nav"); // Change to blue when scrolled down
+      setNavColor("dark-nav");
     } else {
-      setNavColor("dark-nav"); // Default dark navbar
+      setNavColor("dark-nav");
     }
   };
 
@@ -55,7 +64,7 @@ const Navbar = () => {
           <Link to="/">Home</Link>
         </li>
         <li>
-          <Link to="/add-property">List Your Hostel/PG </Link>
+          <Link to="/add-property">List Your Hostel/PG</Link>
         </li>
         <li>
           <Link to="/properties">Find PG</Link>
@@ -87,7 +96,15 @@ const Navbar = () => {
         </li>
 
         <li>
-          <button className="btn">Login/SignUp</button>
+          {isAuthenticated ? (
+            <button className="btn" onClick={handleLogout}>
+              Logout
+            </button>
+          ) : (
+            <Link to="/login" className="btn">
+              Login/SignUp
+            </Link>
+          )}
         </li>
       </ul>
 
