@@ -6,13 +6,14 @@ const dotenv = require("dotenv");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
+const path = require("path");
 
 dotenv.config();
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use("/uploads", express.static("uploads"));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // MongoDB Connection
 mongoose
@@ -22,10 +23,10 @@ mongoose
 
 // User Schema
 const userSchema = new mongoose.Schema({
-  firstName: String,
-  lastName: String,
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
   email: { type: String, unique: true, required: true },
-  password: String,
+  password: { type: String, required: true },
   isVerified: { type: Boolean, default: false },
   otp: String,
   otpExpires: Date,
@@ -39,12 +40,11 @@ const propertySchema = new mongoose.Schema({
   description: String,
   price: { type: Number, required: true },
   location: { type: String, required: true },
-  latitude: Number,
-  longitude: Number,
   images: [String],
   tenantType: String,
   rentingOption: String,
   services: [String],
+  createdAt: { type: Date, default: Date.now },
 });
 
 const Property = mongoose.model("Property", propertySchema);
@@ -75,7 +75,7 @@ const sendOTP = async (email, otp) => {
       from: process.env.EMAIL_USER,
       to: email,
       subject: "OTP Verification",
-      html: `<p>Your OTP for verification is <b>${otp}</b>. It is valid for 10 minutes.</p>`
+      html: `<p>Your OTP for verification is <b>${otp}</b>. It is valid for 10 minutes.</p>`,
     });
     console.log(`📧 OTP sent to ${email}: ${otp}`);
   } catch (error) {
@@ -91,7 +91,7 @@ const verifyToken = (req, res, next) => {
   if (!token) return res.status(401).json({ alert: "❌ No token provided" });
 
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(401).json({ alert: "❌ Unauthorized" });
+    if (err) return res.status(401).json({ alert: "❌ Unauthorized - Invalid or expired token" });
     req.userId = decoded.id;
     next();
   });
@@ -156,13 +156,13 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// Add Property
+// Add Property (protected route)
 app.post("/api/properties", verifyToken, upload.array("images"), async (req, res) => {
   try {
     const { title, price, location } = req.body;
     if (!title || !price || !location) return res.status(400).json({ alert: "❌ Missing required fields" });
-    
-    const images = req.files.map((file) => file.path);
+
+    const images = req.files.map((file) => `/uploads/${file.filename}`);
     const newProperty = new Property({ ...req.body, images });
 
     await newProperty.save();
@@ -170,6 +170,17 @@ app.post("/api/properties", verifyToken, upload.array("images"), async (req, res
   } catch (error) {
     console.error("❌ Failed to add property:", error);
     res.status(500).json({ alert: "❌ Failed to add property" });
+  }
+});
+
+// Get All Properties
+app.get("/api/properties", async (req, res) => {
+  try {
+    const properties = await Property.find();
+    res.json(properties);
+  } catch (error) {
+    console.error("❌ Failed to fetch properties:", error);
+    res.status(500).json({ alert: "❌ Failed to fetch properties" });
   }
 });
 
