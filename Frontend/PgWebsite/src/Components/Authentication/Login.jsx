@@ -6,7 +6,6 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import './Login.css';
 
-
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,6 +19,7 @@ const Login = () => {
       localStorage.setItem("token", res.data.token);
       navigate("/");
     } catch (err) {
+      console.error("Login error:", err);
       toast.error(err.response?.data?.alert || "❌ Login failed. Please try again.");
     }
   };
@@ -39,13 +39,11 @@ const Login = () => {
           </div>
           <button type="submit" className="btn2">LOGIN</button>
 
-          {/* Forgot Password Link */}
           <p style={{ textAlign: "center", marginTop: "10px" }}>
             <Link to="/forgot-password" style={{ color: "#fff", textDecoration: "underline" }}>Forgot Password?</Link>
           </p>
         </form>
 
-        {/* Register Link */}
         <Link to="/register" className="link">REGISTER</Link>
       </div>
     </section>
